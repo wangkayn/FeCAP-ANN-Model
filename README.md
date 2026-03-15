@@ -75,21 +75,7 @@ This generates a Verilog-A code snippet containing the explicit ANN forward pass
 - **Data split**: 70/30 group-based split (GroupShuffleSplit by Device), ensuring no data leakage across devices
 - **Normalization**: QuantileTransformer (100 quantiles, uniform distribution)
 
-## Verilog-A Integration
 
-The exported Verilog-A model uses:
-
-- **`tanh` activation** --natively supported by Verilog-A, smooth and differentiable
-- **Min-max normalization** --embedded as constants in the generated code
-- **Two networks** --one per sweep direction, blended via `transition()` for Jacobian-friendly SPICE convergence
-- **Timer-decoupled direction switching** --avoids convergence issues from abrupt state changes during Newton-Raphson iterations
-
-Module interface (drop-in replacement for physics-based pfecap):
-```verilog
-module pfecap(pos, neg, qin);
-    // pos, neg: capacitor terminals
-    // qin: input charge/polarization (as voltage)
-```
 
 ## Citation
 
