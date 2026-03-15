@@ -9,12 +9,12 @@ This repository provides a complete, reproducible pipeline for building a data-d
 ### Workflow
 
 ```
-Measured P-V data ──> Train ANN (PyTorch) ──> Export weights ──> Verilog-A compact model ──> SPICE simulation
+Measured P-V data --> Train ANN (PyTorch) --> Export weights --> Verilog-A compact model --> SPICE simulation
 ```
 
 ### Key Features
 
-- **Data-driven**: No material-specific physical equations required — the ANN learns the polarization-voltage relationship directly from measurement data.
+- **Data-driven**: No material-specific physical equations required --the ANN learns the polarization-voltage relationship directly from measurement data.
 - **Direction-aware**: Separate models for rising (Direction 1) and falling (Direction 0) hysteresis branches, capturing the ferroelectric memory effect.
 - **SPICE-ready**: `pth2va.py` converts trained PyTorch weights into Verilog-A code with explicit algebraic expressions, compatible with standard SPICE simulators (Cadence Spectre, Synopsys HSPICE, etc.).
 - **Baseline comparison**: Includes Random Forest, SVR, and LASSO baselines for benchmarking.
@@ -23,7 +23,7 @@ Measured P-V data ──> Train ANN (PyTorch) ──> Export weights ──> Ver
 
 | File | Description |
 |---|---|
-| `ann_model.py` | ANN model definition, training, and evaluation (4 hidden layers: 36→180→210→180, LeakyReLU, 5% dropout) |
+| `ann_model.py` | ANN model definition, training, and evaluation (4 hidden layers: 36->180->210->180, LeakyReLU, 5% dropout) |
 | `baseline_rf.py` | Random Forest baseline |
 | `baseline_svr.py` | Support Vector Regression baseline |
 | `baseline_lasso.py` | LASSO regression baseline |
@@ -48,7 +48,7 @@ python run_all.py --data ../ccleaned_data.xlsx
 Output example:
 
 ```
-Method               MSE          RMSE         MAE          Adj R²
+Method               MSE          RMSE         MAE          Adj R2
 ------------------------------------------------------------------------
 Random Forest        3.241182     1.800328     1.107198     0.990977
 SVR                  7.192422     2.681868     1.627498     0.979953
@@ -69,8 +69,8 @@ This generates a Verilog-A code snippet containing the explicit ANN forward pass
 ## Model Architecture
 
 - **Input features**: Voltage, Cycle number, Initial Polarization, FE thickness, Measurement
-- **Network**: 4 hidden layers (36 → 180 → 210 → 180), LeakyReLU activation, 5% dropout
-- **Output**: Polarization (uC/cm²)
+- **Network**: 4 hidden layers (36 ->180 ->210 ->180), LeakyReLU activation, 5% dropout
+- **Output**: Polarization (uC/cm^2)
 - **Training**: Adam optimizer (lr=0.001), MSE loss, early stopping (patience=50), batch size=32
 - **Data split**: 70/30 group-based split (GroupShuffleSplit by Device), ensuring no data leakage across devices
 - **Normalization**: QuantileTransformer (100 quantiles, uniform distribution)
@@ -79,10 +79,10 @@ This generates a Verilog-A code snippet containing the explicit ANN forward pass
 
 The exported Verilog-A model uses:
 
-- **`tanh` activation** — natively supported by Verilog-A, smooth and differentiable
-- **Min-max normalization** — embedded as constants in the generated code
-- **Two networks** — one per sweep direction, blended via `transition()` for Jacobian-friendly SPICE convergence
-- **Timer-decoupled direction switching** — avoids convergence issues from abrupt state changes during Newton-Raphson iterations
+- **`tanh` activation** --natively supported by Verilog-A, smooth and differentiable
+- **Min-max normalization** --embedded as constants in the generated code
+- **Two networks** --one per sweep direction, blended via `transition()` for Jacobian-friendly SPICE convergence
+- **Timer-decoupled direction switching** --avoids convergence issues from abrupt state changes during Newton-Raphson iterations
 
 Module interface (drop-in replacement for physics-based pfecap):
 ```verilog

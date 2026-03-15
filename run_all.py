@@ -5,7 +5,7 @@ import baseline_rf
 import baseline_svr
 import ann_model
 
-HEADER = f"{'Method':<20} {'MSE':<12} {'RMSE':<12} {'MAE':<12} {'Adj R²':<12}"
+HEADER = f"{'Method':<20} {'MSE':<12} {'RMSE':<12} {'MAE':<12} {'Adj R2':<12}"
 DIVIDER = '-' * len(HEADER)
 
 

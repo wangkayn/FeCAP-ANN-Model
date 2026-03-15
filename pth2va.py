@@ -1,10 +1,10 @@
 """
-pth2va.py — 将 PyTorch .pth 权重转换为 Verilog-A ANN 前向传播代码片段
+pth2va.py -- Convert PyTorch .pth weights to Verilog-A ANN forward-pass code snippet.
 
-输入: 两个 .pth 文件 (direction 0/1) + va_scalers.json
-输出: 纯 ANN 权重展开的 Verilog-A 代码片段 (只有 h1/h2/out 计算，无 module 外壳)
+Input:  Two .pth files (direction 0 and 1) + va_scalers.json
+Output: Pure ANN weight-unrolled Verilog-A snippet (h1/h2/out only, no module wrapper)
 
-用法:
+Usage:
     python pth2va.py
     python pth2va.py --dir0 best_va_dir0.pth --dir1 best_va_dir1.pth --scalers va_scalers.json --out ann_weights.va
 """
@@ -39,7 +39,7 @@ def load_weights(pth_path):
 
 
 def gen_forward_pass(w, scalers):
-    """只生成 ANN 前向传播代码片段"""
+    """Generate ANN forward-pass code snippet only."""
     lines = []
     a = lines.append
 
@@ -52,7 +52,7 @@ def gen_forward_pass(w, scalers):
         inp0 = f"(restored_q - ({sc['xmin'][0]:.10e})) / ({sc['xrng'][0]:.10e})"
         inp1 = f"(FE_nm - ({sc['xmin'][1]:.10e})) / ({sc['xrng'][1]:.10e})"
 
-        a(f"    // ── Direction {d} forward pass ──")
+        a(f"    // -- Direction {d} forward pass --")
         for j in range(NH):
             a(f"    h1_{tag}[{j}] = tanh({W1[j][0]:.10e} * {inp0} + {W1[j][1]:.10e} * {inp1} + ({b1[j]:.10e}));")
         for j in range(NH):
