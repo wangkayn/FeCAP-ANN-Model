@@ -1,3 +1,9 @@
+"""
+Run all models (ANN + baselines) and print a comparison table.
+
+Usage:
+    python run_all.py --data your_data.xlsx
+"""
 import argparse
 
 import baseline_lasso
@@ -13,7 +19,7 @@ def _print_row(name, m):
     print(f"{name:<20} {m['MSE']:.6f}  {m['RMSE']:.6f}  {m['MAE']:.6f}  {m['Adj_R2']:.6f}")
 
 
-def main(data_path='../ccleaned_data.xlsx'):
+def main(data_path):
     print(HEADER)
     print(DIVIDER)
     for name, fn in [
@@ -28,7 +34,7 @@ def main(data_path='../ccleaned_data.xlsx'):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data', default='../ccleaned_data.xlsx')
+    parser = argparse.ArgumentParser(description='Run all models and compare')
+    parser.add_argument('--data', required=True, help='Path to Excel data file (.xlsx)')
     args = parser.parse_args()
     main(args.data)

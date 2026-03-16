@@ -1,3 +1,24 @@
+"""
+ANN model for FeCAP polarization prediction.
+
+Data requirements:
+    An Excel file (.xlsx) with a sheet named 'alldata' containing columns:
+        - Voltage         : Applied voltage (V)
+        - Polarization    : Measured polarization (uC/cm^2) [target]
+        - Cycle number    : Wake-up cycle count
+        - FE              : Ferroelectric layer thickness (nm)
+        - Direction       : Sweep direction (0 or 1), used for computing P_init
+        - Device          : Device identifier, used for group-based splitting
+        - Number          : Measurement sweep index within a cycle
+
+    The script automatically computes Initial_Polarization (P_init) as
+    the previous polarization value within each (Device, Direction,
+    Cycle number, Number) group.
+
+Usage:
+    python ann_model.py --data your_data.xlsx
+"""
+import argparse
 import numpy as np
 import pandas as pd
 import torch
@@ -29,7 +50,7 @@ def _load_data(data_path):
     df_trainval = df.iloc[trainval_idx]
     df_test = df.iloc[test_idx]
 
-    # Step 2: split Train/Val from the remaining 70% (~20% val of original = ~28% of trainval)
+    # Step 2: split Train/Val from the remaining 70%
     gss_val = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
     train_idx, val_idx = next(gss_val.split(df_trainval, groups=df_trainval['Device']))
     df_train = df_trainval.iloc[train_idx]
@@ -122,22 +143,23 @@ def _predict(model, X, device):
         return model(X_t).cpu().numpy().flatten()
 
 
-def train_and_evaluate(data_path='../ccleaned_data.xlsx'):
+def train_and_evaluate(data_path):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     data = _load_data(data_path)
-    # Early stopping uses val set; test set is untouched during training
     model = _train(
         data['X_train_scaled'], data['y_train'],
         data['X_val_scaled'],   data['y_val'],
         device,
     )
-    # Final evaluation on held-out test set only
     y_pred = _predict(model, data['X_test_scaled'], device)
     y_true = data['y_test'].values
     return {'combined': _compute_metrics(y_true, y_pred, n_features=N_INPUTS)}
 
 
 if __name__ == '__main__':
-    results = train_and_evaluate()
+    parser = argparse.ArgumentParser(description='Train and evaluate ANN model')
+    parser.add_argument('--data', required=True, help='Path to Excel data file (.xlsx)')
+    args = parser.parse_args()
+    results = train_and_evaluate(args.data)
     m = results['combined']
     print(f"{'Our Work (ANN)':<20} {m['MSE']:.6f}  {m['RMSE']:.6f}  {m['MAE']:.6f}  {m['Adj_R2']:.6f}")

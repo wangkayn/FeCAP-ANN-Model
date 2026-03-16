@@ -1,3 +1,12 @@
+"""
+SVR baseline for FeCAP polarization prediction.
+
+Data requirements: see ann_model.py docstring for the expected Excel format.
+
+Usage:
+    python baseline_svr.py --data your_data.xlsx
+"""
+import argparse
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
@@ -48,7 +57,7 @@ def _compute_metrics(y_true, y_pred, n_features=N_FEATURES):
     return {'MSE': mse, 'RMSE': rmse, 'MAE': mae, 'Adj_R2': adj_r2}
 
 
-def train_and_evaluate(data_path='../ccleaned_data.xlsx'):
+def train_and_evaluate(data_path):
     data = _load_data(data_path)
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
@@ -61,6 +70,9 @@ def train_and_evaluate(data_path='../ccleaned_data.xlsx'):
 
 
 if __name__ == '__main__':
-    results = train_and_evaluate()
+    parser = argparse.ArgumentParser(description='Train and evaluate SVR baseline')
+    parser.add_argument('--data', required=True, help='Path to Excel data file (.xlsx)')
+    args = parser.parse_args()
+    results = train_and_evaluate(args.data)
     m = results['combined']
     print(f"{'SVR':<20} {m['MSE']:.6f}  {m['RMSE']:.6f}  {m['MAE']:.6f}  {m['Adj_R2']:.6f}")
