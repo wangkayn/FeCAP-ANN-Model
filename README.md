@@ -15,7 +15,7 @@ Measured P-V data --> Train ANN (PyTorch) --> Export weights --> Verilog-A compa
 ### Key Features
 
 - **Data-driven**: No material-specific physical equations required --the ANN learns the polarization-voltage relationship directly from measurement data.
-- **Direction-aware**: Separate models for rising (Direction 1) and falling (Direction 0) hysteresis branches, capturing the ferroelectric memory effect.
+- **Single unified model**: One network handles both rising and falling hysteresis branches --the initial polarization (P_init) implicitly encodes the sweep direction.
 - **SPICE-ready**: `pth2va.py` converts trained PyTorch weights into Verilog-A code with explicit algebraic expressions, compatible with standard SPICE simulators (Cadence Spectre, Synopsys HSPICE, etc.).
 - **Baseline comparison**: Includes Random Forest, SVR, and LASSO baselines for benchmarking.
 
@@ -68,7 +68,7 @@ This generates a Verilog-A code snippet containing the explicit ANN forward pass
 
 ## Model Architecture
 
-- **Input features**: Voltage, Cycle number, Initial Polarization, FE thickness, Measurement
+- **Input features**: Applied voltage, Cycle number, Initial polarization (P_init), FE thickness (t_FE)
 - **Network**: 4 hidden layers (36 ->180 ->210 ->180), LeakyReLU activation, 5% dropout
 - **Output**: Polarization (uC/cm^2)
 - **Training**: Adam optimizer (lr=0.001), MSE loss, early stopping (patience=50), batch size=32
@@ -76,6 +76,20 @@ This generates a Verilog-A code snippet containing the explicit ANN forward pass
 - **Normalization**: QuantileTransformer (100 quantiles, uniform distribution)
 
 
+## Verilog-A Integration
+
+The exported Verilog-A model uses:
+
+- **`tanh` activation** --natively supported by Verilog-A, smooth and differentiable
+- **Min-max normalization** --embedded as constants in the generated code
+- **Single network** --no direction switching needed, P_init implicitly determines the hysteresis branch
+
+Module interface (drop-in replacement for physics-based pfecap):
+```verilog
+module pfecap(pos, neg, qin);
+    // pos, neg: capacitor terminals
+    // qin: input charge/polarization (as voltage)
+```
 
 ## Citation
 

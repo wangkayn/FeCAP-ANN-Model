@@ -5,9 +5,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import QuantileTransformer, StandardScaler
 from sklearn.svm import SVR
 
-FEATURES = ['Voltage', 'Cycle number', 'Initial_Polarization', 'FE', 'Measurement']
+FEATURES = ['Voltage', 'Cycle number', 'Initial_Polarization', 'FE']
 TARGET = 'Polarization'
 SEED = 42
+N_FEATURES = 4
 
 
 def _load_data(data_path):
@@ -16,27 +17,22 @@ def _load_data(data_path):
     df = df.sort_values(['Device', 'Direction', 'Cycle number', 'Number', 'Voltage'])
     df['Initial_Polarization'] = df.groupby(['Device', 'Direction', 'Cycle number', 'Number'])[TARGET].shift(1)
     df = df.dropna(subset=['Initial_Polarization'])
-    result = {}
-    for direction in (0, 1):
-        key = f'dir{direction}'
-        subset = df[df['Direction'] == direction].copy()
-        gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
-        train_idx, test_idx = next(gss.split(subset, groups=subset['Device']))
-        X_train = subset.iloc[train_idx][FEATURES]
-        X_test = subset.iloc[test_idx][FEATURES]
-        y_train = subset.iloc[train_idx][TARGET]
-        y_test = subset.iloc[test_idx][TARGET]
-        scaler = QuantileTransformer(n_quantiles=100, output_distribution='uniform', random_state=SEED)
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        result[key] = {
-            'X_train_scaled': X_train_scaled, 'X_test_scaled': X_test_scaled,
-            'y_train': y_train, 'y_test': y_test,
-        }
-    return result
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
+    train_idx, test_idx = next(gss.split(df, groups=df['Device']))
+    X_train = df.iloc[train_idx][FEATURES]
+    X_test = df.iloc[test_idx][FEATURES]
+    y_train = df.iloc[train_idx][TARGET]
+    y_test = df.iloc[test_idx][TARGET]
+    scaler = QuantileTransformer(n_quantiles=100, output_distribution='uniform', random_state=SEED)
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    return {
+        'X_train_scaled': X_train_scaled, 'X_test_scaled': X_test_scaled,
+        'y_train': y_train, 'y_test': y_test,
+    }
 
 
-def _compute_metrics(y_true, y_pred, n_features=5):
+def _compute_metrics(y_true, y_pred, n_features=N_FEATURES):
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     residuals = y_true - y_pred
@@ -54,24 +50,14 @@ def _compute_metrics(y_true, y_pred, n_features=5):
 
 def train_and_evaluate(data_path='../ccleaned_data.xlsx'):
     data = _load_data(data_path)
-    all_y_true, all_y_pred = [], []
-    results = {}
-    for key in ('dir0', 'dir1'):
-        split = data[key]
-        pipeline = Pipeline([
-            ('scaler', StandardScaler()),
-            ('svr',    SVR(kernel='rbf', C=1.0, epsilon=0.1)),
-        ])
-        pipeline.fit(split['X_train_scaled'], split['y_train'])
-        y_pred = pipeline.predict(split['X_test_scaled'])
-        y_true = split['y_test'].values
-        results[key] = _compute_metrics(y_true, y_pred)
-        all_y_true.append(y_true)
-        all_y_pred.append(y_pred)
-    combined_true = np.concatenate(all_y_true)
-    combined_pred = np.concatenate(all_y_pred)
-    results['combined'] = _compute_metrics(combined_true, combined_pred)
-    return results
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ('svr',    SVR(kernel='rbf', C=1.0, epsilon=0.1)),
+    ])
+    pipeline.fit(data['X_train_scaled'], data['y_train'])
+    y_pred = pipeline.predict(data['X_test_scaled'])
+    y_true = data['y_test'].values
+    return {'combined': _compute_metrics(y_true, y_pred)}
 
 
 if __name__ == '__main__':

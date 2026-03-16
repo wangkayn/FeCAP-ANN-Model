@@ -6,14 +6,14 @@ from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import QuantileTransformer
 from torch.utils.data import DataLoader, TensorDataset
 
-FEATURES = ['Voltage', 'Cycle number', 'Initial_Polarization', 'FE', 'Measurement']
+FEATURES = ['Voltage', 'Cycle number', 'Initial_Polarization', 'FE']
 TARGET = 'Polarization'
 SEED = 42
 BATCH_SIZE = 32
 LR = 0.001
 MAX_EPOCHS = 1000
 PATIENCE = 50
-N_INPUTS = 5
+N_INPUTS = 4
 
 
 def _load_data(data_path):
@@ -22,28 +22,23 @@ def _load_data(data_path):
     df = df.sort_values(['Device', 'Direction', 'Cycle number', 'Number', 'Voltage'])
     df['Initial_Polarization'] = df.groupby(['Device', 'Direction', 'Cycle number', 'Number'])[TARGET].shift(1)
     df = df.dropna(subset=['Initial_Polarization'])
-    result = {}
-    for direction in (0, 1):
-        key = f'dir{direction}'
-        subset = df[df['Direction'] == direction].copy()
-        gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
-        train_idx, test_idx = next(gss.split(subset, groups=subset['Device']))
-        X_train = subset.iloc[train_idx][FEATURES]
-        X_test = subset.iloc[test_idx][FEATURES]
-        y_train = subset.iloc[train_idx][TARGET]
-        y_test = subset.iloc[test_idx][TARGET]
-        scaler = QuantileTransformer(n_quantiles=100, output_distribution='uniform', random_state=SEED)
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        result[key] = {
-            'X_train': X_train, 'X_test': X_test,
-            'y_train': y_train, 'y_test': y_test,
-            'X_train_scaled': X_train_scaled, 'X_test_scaled': X_test_scaled,
-        }
-    return result
+    gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
+    train_idx, test_idx = next(gss.split(df, groups=df['Device']))
+    X_train = df.iloc[train_idx][FEATURES]
+    X_test = df.iloc[test_idx][FEATURES]
+    y_train = df.iloc[train_idx][TARGET]
+    y_test = df.iloc[test_idx][TARGET]
+    scaler = QuantileTransformer(n_quantiles=100, output_distribution='uniform', random_state=SEED)
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    return {
+        'X_train': X_train, 'X_test': X_test,
+        'y_train': y_train, 'y_test': y_test,
+        'X_train_scaled': X_train_scaled, 'X_test_scaled': X_test_scaled,
+    }
 
 
-def _compute_metrics(y_true, y_pred, n_features=5):
+def _compute_metrics(y_true, y_pred, n_features=N_INPUTS):
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     residuals = y_true - y_pred
@@ -74,7 +69,7 @@ def _set_seed(seed=SEED):
     np.random.seed(seed)
 
 
-def train_direction(X_train, y_train, X_val, y_val, device):
+def _train(X_train, y_train, X_val, y_val, device):
     _set_seed()
     X_tr = torch.tensor(X_train, dtype=torch.float32).to(device)
     y_tr = torch.tensor(y_train.values, dtype=torch.float32).unsqueeze(1).to(device)
@@ -87,7 +82,6 @@ def train_direction(X_train, y_train, X_val, y_val, device):
     best_val_loss = float('inf')
     best_state = None
     patience_counter = 0
-    history = []
     for epoch in range(MAX_EPOCHS):
         model.train()
         for X_batch, y_batch in loader:
@@ -98,7 +92,6 @@ def train_direction(X_train, y_train, X_val, y_val, device):
         model.eval()
         with torch.no_grad():
             val_loss = criterion(model(X_v), y_v).item()
-        history.append(val_loss)
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
@@ -108,10 +101,10 @@ def train_direction(X_train, y_train, X_val, y_val, device):
             if patience_counter >= PATIENCE:
                 break
     model.load_state_dict(best_state)
-    return model, history
+    return model
 
 
-def predict(model, X, device):
+def _predict(model, X, device):
     model.eval()
     with torch.no_grad():
         X_t = torch.tensor(X, dtype=torch.float32).to(device)
@@ -121,24 +114,14 @@ def predict(model, X, device):
 def train_and_evaluate(data_path='../ccleaned_data.xlsx'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     data = _load_data(data_path)
-    all_y_true, all_y_pred = [], []
-    results = {}
-    for key in ('dir0', 'dir1'):
-        split = data[key]
-        model, _ = train_direction(
-            split['X_train_scaled'], split['y_train'],
-            split['X_test_scaled'],  split['y_test'],
-            device,
-        )
-        y_pred = predict(model, split['X_test_scaled'], device)
-        y_true = split['y_test'].values
-        results[key] = _compute_metrics(y_true, y_pred, n_features=N_INPUTS)
-        all_y_true.append(y_true)
-        all_y_pred.append(y_pred)
-    combined_true = np.concatenate(all_y_true)
-    combined_pred = np.concatenate(all_y_pred)
-    results['combined'] = _compute_metrics(combined_true, combined_pred, n_features=N_INPUTS)
-    return results
+    model = _train(
+        data['X_train_scaled'], data['y_train'],
+        data['X_test_scaled'],  data['y_test'],
+        device,
+    )
+    y_pred = _predict(model, data['X_test_scaled'], device)
+    y_true = data['y_test'].values
+    return {'combined': _compute_metrics(y_true, y_pred, n_features=N_INPUTS)}
 
 
 if __name__ == '__main__':
