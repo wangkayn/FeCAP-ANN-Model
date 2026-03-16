@@ -22,19 +22,29 @@ def _load_data(data_path):
     df = df.sort_values(['Device', 'Direction', 'Cycle number', 'Number', 'Voltage'])
     df['Initial_Polarization'] = df.groupby(['Device', 'Direction', 'Cycle number', 'Number'])[TARGET].shift(1)
     df = df.dropna(subset=['Initial_Polarization'])
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
-    train_idx, test_idx = next(gss.split(df, groups=df['Device']))
-    X_train = df.iloc[train_idx][FEATURES]
-    X_test = df.iloc[test_idx][FEATURES]
-    y_train = df.iloc[train_idx][TARGET]
-    y_test = df.iloc[test_idx][TARGET]
+
+    # Step 1: split off Test set (30%) by Device
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
+    trainval_idx, test_idx = next(gss_test.split(df, groups=df['Device']))
+    df_trainval = df.iloc[trainval_idx]
+    df_test = df.iloc[test_idx]
+
+    # Step 2: split Train/Val from the remaining 70% (~20% val of original = ~28% of trainval)
+    gss_val = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=SEED)
+    train_idx, val_idx = next(gss_val.split(df_trainval, groups=df_trainval['Device']))
+    df_train = df_trainval.iloc[train_idx]
+    df_val = df_trainval.iloc[val_idx]
+
+    # Scaler fit ONLY on train
     scaler = QuantileTransformer(n_quantiles=100, output_distribution='uniform', random_state=SEED)
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    X_train_scaled = scaler.fit_transform(df_train[FEATURES])
+    X_val_scaled = scaler.transform(df_val[FEATURES])
+    X_test_scaled = scaler.transform(df_test[FEATURES])
+
     return {
-        'X_train': X_train, 'X_test': X_test,
-        'y_train': y_train, 'y_test': y_test,
-        'X_train_scaled': X_train_scaled, 'X_test_scaled': X_test_scaled,
+        'X_train_scaled': X_train_scaled, 'y_train': df_train[TARGET],
+        'X_val_scaled': X_val_scaled,     'y_val': df_val[TARGET],
+        'X_test_scaled': X_test_scaled,   'y_test': df_test[TARGET],
     }
 
 
@@ -70,6 +80,7 @@ def _set_seed(seed=SEED):
 
 
 def _train(X_train, y_train, X_val, y_val, device):
+    """Train with early stopping on validation set (NOT test set)."""
     _set_seed()
     X_tr = torch.tensor(X_train, dtype=torch.float32).to(device)
     y_tr = torch.tensor(y_train.values, dtype=torch.float32).unsqueeze(1).to(device)
@@ -114,11 +125,13 @@ def _predict(model, X, device):
 def train_and_evaluate(data_path='../ccleaned_data.xlsx'):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     data = _load_data(data_path)
+    # Early stopping uses val set; test set is untouched during training
     model = _train(
         data['X_train_scaled'], data['y_train'],
-        data['X_test_scaled'],  data['y_test'],
+        data['X_val_scaled'],   data['y_val'],
         device,
     )
+    # Final evaluation on held-out test set only
     y_pred = _predict(model, data['X_test_scaled'], device)
     y_true = data['y_test'].values
     return {'combined': _compute_metrics(y_true, y_pred, n_features=N_INPUTS)}

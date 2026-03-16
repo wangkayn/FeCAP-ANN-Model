@@ -17,18 +17,18 @@ def _load_data(data_path):
     df = df.sort_values(['Device', 'Direction', 'Cycle number', 'Number', 'Voltage'])
     df['Initial_Polarization'] = df.groupby(['Device', 'Direction', 'Cycle number', 'Number'])[TARGET].shift(1)
     df = df.dropna(subset=['Initial_Polarization'])
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
-    train_idx, test_idx = next(gss.split(df, groups=df['Device']))
-    X_train = df.iloc[train_idx][FEATURES]
-    X_test = df.iloc[test_idx][FEATURES]
-    y_train = df.iloc[train_idx][TARGET]
-    y_test = df.iloc[test_idx][TARGET]
+
+    gss_test = GroupShuffleSplit(n_splits=1, test_size=0.3, random_state=SEED)
+    train_idx, test_idx = next(gss_test.split(df, groups=df['Device']))
+    df_train = df.iloc[train_idx]
+    df_test = df.iloc[test_idx]
+
     scaler = QuantileTransformer(n_quantiles=100, output_distribution='uniform', random_state=SEED)
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    X_train_scaled = scaler.fit_transform(df_train[FEATURES])
+    X_test_scaled = scaler.transform(df_test[FEATURES])
     return {
         'X_train_scaled': X_train_scaled, 'X_test_scaled': X_test_scaled,
-        'y_train': y_train, 'y_test': y_test,
+        'y_train': df_train[TARGET], 'y_test': df_test[TARGET],
     }
 
 
